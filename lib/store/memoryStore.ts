@@ -1,9 +1,11 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { AIResult, AuditQuery, AuditReportJson, CrawledPage } from "@/types/audit";
 import type { Competitor, Project, ProjectStatus } from "@/types/project";
 import type { AuditReport } from "@/types/report";
 import type { AuditStore, CreateProjectInput, ReportBundle } from "./types";
 
-interface MemoryState {
+interface LocalState {
   projects: Map<string, Project>;
   competitors: Map<string, Competitor[]>;
   queries: Map<string, AuditQuery[]>;
@@ -12,11 +14,20 @@ interface MemoryState {
   reports: Map<string, AuditReport>;
 }
 
-const globalForStore = globalThis as typeof globalThis & {
-  __b2bAuditMemoryStore?: MemoryState;
-};
+interface PersistedState {
+  projects: Project[];
+  competitors: Record<string, Competitor[]>;
+  queries: Record<string, AuditQuery[]>;
+  aiResults: Record<string, AIResult[]>;
+  crawledPages: Record<string, CrawledPage[]>;
+  reports: Record<string, AuditReport>;
+}
 
-function createState(): MemoryState {
+function getStorePath() {
+  return process.env.LOCAL_AUDIT_STORE_PATH || join(process.cwd(), ".data", "audit-store.json");
+}
+
+function createState(): LocalState {
   return {
     projects: new Map(),
     competitors: new Map(),
@@ -27,9 +38,43 @@ function createState(): MemoryState {
   };
 }
 
+function toPersistedState(state: LocalState): PersistedState {
+  return {
+    projects: Array.from(state.projects.values()),
+    competitors: Object.fromEntries(state.competitors.entries()),
+    queries: Object.fromEntries(state.queries.entries()),
+    aiResults: Object.fromEntries(state.aiResults.entries()),
+    crawledPages: Object.fromEntries(state.crawledPages.entries()),
+    reports: Object.fromEntries(state.reports.entries()),
+  };
+}
+
+function fromPersistedState(persisted: PersistedState): LocalState {
+  return {
+    projects: new Map(persisted.projects.map((project) => [project.id, project])),
+    competitors: new Map(Object.entries(persisted.competitors || {})),
+    queries: new Map(Object.entries(persisted.queries || {})),
+    aiResults: new Map(Object.entries(persisted.aiResults || {})),
+    crawledPages: new Map(Object.entries(persisted.crawledPages || {})),
+    reports: new Map(Object.entries(persisted.reports || {})),
+  };
+}
+
 function getState() {
-  globalForStore.__b2bAuditMemoryStore ||= createState();
-  return globalForStore.__b2bAuditMemoryStore;
+  const storePath = getStorePath();
+  if (!existsSync(storePath)) return createState();
+
+  try {
+    return fromPersistedState(JSON.parse(readFileSync(storePath, "utf8")) as PersistedState);
+  } catch {
+    return createState();
+  }
+}
+
+function saveState(state: LocalState) {
+  const storePath = getStorePath();
+  mkdirSync(dirname(storePath), { recursive: true });
+  writeFileSync(storePath, JSON.stringify(toPersistedState(state), null, 2));
 }
 
 function id(prefix: string) {
@@ -41,10 +86,9 @@ function now() {
 }
 
 export function createMemoryStore(): AuditStore {
-  const state = getState();
-
   return {
     async createProject(input: CreateProjectInput) {
+      const state = getState();
       const timestamp = now();
       const project: Project = {
         id: id("project"),
@@ -75,19 +119,23 @@ export function createMemoryStore(): AuditStore {
       state.queries.set(project.id, []);
       state.aiResults.set(project.id, []);
       state.crawledPages.set(project.id, []);
+      saveState(state);
 
       return { project, competitors };
     },
 
     async getProject(projectId: string) {
+      const state = getState();
       return state.projects.get(projectId) || null;
     },
 
     async getCompetitors(projectId: string) {
+      const state = getState();
       return state.competitors.get(projectId) || [];
     },
 
     async updateProjectStatus(projectId: string, status: ProjectStatus, errorMessage?: string | null) {
+      const state = getState();
       const project = state.projects.get(projectId);
       if (!project) return;
       state.projects.set(projectId, {
@@ -96,39 +144,47 @@ export function createMemoryStore(): AuditStore {
         error_message: errorMessage ?? null,
         updated_at: now(),
       });
+      saveState(state);
     },
 
     async createAuditQueries(projectId: string, queries: AuditQuery[]) {
+      const state = getState();
       const saved = queries.map((query) => ({
         ...query,
         id: query.id || id("query"),
         project_id: projectId,
       }));
       state.queries.set(projectId, saved);
+      saveState(state);
       return saved;
     },
 
     async createAIResults(projectId: string, results: AIResult[]) {
+      const state = getState();
       const saved = results.map((result) => ({
         ...result,
         id: result.id || id("result"),
         project_id: projectId,
       }));
       state.aiResults.set(projectId, saved);
+      saveState(state);
       return saved;
     },
 
     async createCrawledPages(projectId: string, pages: CrawledPage[]) {
+      const state = getState();
       const saved = pages.map((page) => ({
         ...page,
         id: page.id || id("page"),
         project_id: projectId,
       }));
       state.crawledPages.set(projectId, saved);
+      saveState(state);
       return saved;
     },
 
     async createAuditReport(projectId: string, reportJson: AuditReportJson) {
+      const state = getState();
       const report: AuditReport = {
         id: id("report"),
         project_id: projectId,
@@ -143,10 +199,12 @@ export function createMemoryStore(): AuditStore {
         created_at: now(),
       };
       state.reports.set(projectId, report);
+      saveState(state);
       return report;
     },
 
     async getReportBundle(projectId: string): Promise<ReportBundle | null> {
+      const state = getState();
       const project = state.projects.get(projectId);
       if (!project) return null;
 
