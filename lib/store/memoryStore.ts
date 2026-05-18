@@ -91,8 +91,8 @@ export function createMemoryStore(): AuditStore {
       const state = getState();
       const timestamp = now();
       const project: Project = {
-        id: id("project"),
-        user_id: "demo-user",
+        id: input.projectId || id("project"),
+        user_id: null,
         brand_name: input.brandName,
         website_url: input.websiteUrl,
         industry: input.industry,

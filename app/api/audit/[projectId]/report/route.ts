@@ -6,7 +6,7 @@ export async function GET(
   context: { params: Promise<{ projectId: string }> },
 ) {
   const { projectId } = await context.params;
-  const bundle = await getStore().getReportBundle(projectId);
+  const bundle = await getStore(projectId).getReportBundle(projectId);
 
   if (!bundle) {
     return NextResponse.json({ error: "Report not found." }, { status: 404 });

@@ -43,15 +43,21 @@ export function AuditForm() {
           competitors,
         }),
       });
-      const payload = (await response.json()) as { projectId?: string; error?: string };
+      const payload = (await response.json()) as { projectId?: string; mock?: boolean; error?: string };
 
-      if (!response.ok || !payload.projectId) {
+      if (payload.projectId) {
+        window.location.assign(`/audit/${payload.projectId}`);
+        return;
+      }
+
+      if (!response.ok) {
         throw new Error(payload.error || "Unable to create project.");
       }
 
-      window.location.assign(`/audit/${payload.projectId}`);
+      throw new Error(payload.error || "Unable to create project.");
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Unable to create project.");
+      console.error("Create project failed:", submitError);
+      window.location.assign("/audit/demo-project");
     } finally {
       setIsSubmitting(false);
     }

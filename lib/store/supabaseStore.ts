@@ -1,24 +1,11 @@
-import { createClient } from "@supabase/supabase-js";
 import type { AIResult, AuditQuery, AuditReportJson, CrawledPage } from "@/types/audit";
 import type { Competitor, Project, ProjectStatus } from "@/types/project";
 import type { AuditReport } from "@/types/report";
+import { createSupabaseServiceClient } from "@/lib/supabase/server";
 import type { AuditStore, CreateProjectInput, ReportBundle } from "./types";
 
-function getSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    throw new Error("Supabase service credentials are not configured.");
-  }
-  return createClient(url, key, {
-    auth: {
-      persistSession: false,
-    },
-  });
-}
-
 export function createSupabaseStore(): AuditStore {
-  const supabase = getSupabase();
+  const supabase = createSupabaseServiceClient();
 
   return {
     async createProject(input: CreateProjectInput) {

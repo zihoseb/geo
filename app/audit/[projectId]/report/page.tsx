@@ -9,7 +9,7 @@ export default async function ReportPage({
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = await params;
-  const bundle = await getStore().getReportBundle(projectId);
+  const bundle = await getStore(projectId).getReportBundle(projectId);
 
   if (!bundle) notFound();
 

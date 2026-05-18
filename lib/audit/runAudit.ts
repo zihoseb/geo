@@ -4,20 +4,41 @@ import { analyzeMention, analyzeWebsiteContent, generateBuyerQueries } from "@/l
 import { runPerplexitySearch } from "@/lib/ai/perplexity";
 import { createDemoCrawledPages } from "@/lib/ai/demo";
 import { crawlWebsite } from "@/lib/crawler/crawlWebsite";
-import { getStore } from "@/lib/store";
+import { DEMO_PROJECT_ID, getStore } from "@/lib/store";
+import type { AuditStore } from "@/lib/store/types";
 import type { AIResult, CrawledPage } from "@/types/audit";
+import type { Project } from "@/types/project";
 
 function combineWebsiteText(pages: CrawledPage[]) {
   return pages.map((page) => page.text_content).join("\n\n").slice(0, 60000);
 }
 
-async function getCrawledPages(projectId: string, websiteUrl: string) {
-  const store = getStore();
-  const project = await store.getProject(projectId);
-  if (!project) throw new Error("Project not found.");
+async function ensureDemoProject(projectId: string, store: AuditStore) {
+  if (projectId !== DEMO_PROJECT_ID) return null;
 
+  const existingProject = await store.getProject(projectId);
+  if (existingProject) return existingProject;
+
+  const { project } = await store.createProject({
+    projectId: DEMO_PROJECT_ID,
+    brandName: "Demo B2B Brand",
+    websiteUrl: "https://example.com",
+    industry: "B2B Export Manufacturer",
+    targetMarket: "US / EU",
+    buyerType: "Procurement teams",
+    mainProducts: ["industrial components", "custom assemblies"],
+    competitors: [
+      { name: "Global Supplier Co" },
+      { name: "North Star Manufacturing" },
+    ],
+  });
+
+  return project;
+}
+
+async function getCrawledPages(project: Project) {
   try {
-    const pages = await crawlWebsite(websiteUrl);
+    const pages = await crawlWebsite(project.website_url);
     return pages.length > 0 ? pages : createDemoCrawledPages(project);
   } catch {
     return createDemoCrawledPages(project);
@@ -25,8 +46,8 @@ async function getCrawledPages(projectId: string, websiteUrl: string) {
 }
 
 export async function runAudit(projectId: string) {
-  const store = getStore();
-  const project = await store.getProject(projectId);
+  const store = getStore(projectId);
+  const project = (await store.getProject(projectId)) || (await ensureDemoProject(projectId, store));
   if (!project) {
     throw new Error("Project not found.");
   }
@@ -78,7 +99,7 @@ export async function runAudit(projectId: string) {
     const savedResults = await store.createAIResults(projectId, aiResults);
 
     await store.updateProjectStatus(projectId, "crawling_website");
-    const crawledPages = await getCrawledPages(projectId, project.website_url);
+    const crawledPages = await getCrawledPages(project);
     const savedPages = await store.createCrawledPages(projectId, crawledPages);
 
     await store.updateProjectStatus(projectId, "analyzing");

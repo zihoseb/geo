@@ -3,6 +3,7 @@ import type { Competitor, Project, ProjectStatus } from "@/types/project";
 import type { AuditReport } from "@/types/report";
 
 export interface CreateProjectInput {
+  projectId?: string;
   brandName: string;
   websiteUrl: string;
   industry?: string;
