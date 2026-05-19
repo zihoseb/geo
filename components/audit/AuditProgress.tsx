@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 
@@ -14,8 +15,11 @@ const steps = [
 ];
 
 export function AuditProgress({ projectId }: { projectId: string }) {
+  const router = useRouter();
   const [status, setStatus] = useState<"running" | "completed" | "failed">("running");
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [reportProjectId, setReportProjectId] = useState(projectId);
   const hasStarted = useRef(false);
 
   useEffect(() => {
@@ -29,13 +33,21 @@ export function AuditProgress({ projectId }: { projectId: string }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ projectId }),
         });
-        const payload = (await response.json()) as { status?: string; error?: string };
+        const payload = (await response.json()) as {
+          ok?: boolean;
+          projectId?: string;
+          mock?: boolean;
+          error?: string;
+        };
 
-        if (!response.ok) {
+        if (!response.ok || payload.ok === false) {
           throw new Error(payload.error || "Audit failed.");
         }
 
+        setMessage(payload.mock ? "Demo report generated" : "Report generated");
+        setReportProjectId(payload.projectId || projectId);
         setStatus("completed");
+        router.push(`/audit/${payload.projectId || projectId}/report`);
       } catch (auditError) {
         setStatus("failed");
         setError(auditError instanceof Error ? auditError.message : "Audit failed.");
@@ -43,7 +55,7 @@ export function AuditProgress({ projectId }: { projectId: string }) {
     }
 
     void startAudit();
-  }, [projectId]);
+  }, [projectId, router]);
 
   return (
     <Card>
@@ -76,10 +88,16 @@ export function AuditProgress({ projectId }: { projectId: string }) {
           </div>
         ) : null}
 
+        {message ? (
+          <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-700">
+            {message}
+          </div>
+        ) : null}
+
         {status === "completed" ? (
           <Link
             className="inline-flex h-10 w-full items-center justify-center rounded-md border border-primary bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 sm:w-fit"
-            href={`/audit/${projectId}/report`}
+            href={`/audit/${reportProjectId}/report`}
           >
             Open Report
           </Link>

@@ -6,6 +6,7 @@ import { createDemoCrawledPages } from "@/lib/ai/demo";
 import { crawlWebsite } from "@/lib/crawler/crawlWebsite";
 import { DEMO_PROJECT_ID, getStore } from "@/lib/store";
 import type { AuditStore } from "@/lib/store/types";
+import { hasSupabaseServerConfig } from "@/lib/supabase/server";
 import type { AIResult, CrawledPage } from "@/types/audit";
 import type { Project } from "@/types/project";
 
@@ -46,6 +47,7 @@ async function getCrawledPages(project: Project) {
 }
 
 export async function runAudit(projectId: string) {
+  console.log("Starting audit:", projectId);
   const store = getStore(projectId);
   const project = (await store.getProject(projectId)) || (await ensureDemoProject(projectId, store));
   if (!project) {
@@ -55,6 +57,7 @@ export async function runAudit(projectId: string) {
   try {
     const competitors = await store.getCompetitors(projectId);
 
+    console.log("Generating buyer questions...");
     await store.updateProjectStatus(projectId, "generating_queries");
     const generatedQueries = await generateBuyerQueries({
       brandName: project.brand_name,
@@ -66,6 +69,7 @@ export async function runAudit(projectId: string) {
     });
     const queries = await store.createAuditQueries(projectId, generatedQueries.slice(0, 20));
 
+    console.log("Running AI search checks...");
     await store.updateProjectStatus(projectId, "running_ai_search");
     const aiResults: AIResult[] = [];
     for (const [index, query] of queries.entries()) {
@@ -98,10 +102,12 @@ export async function runAudit(projectId: string) {
     }
     const savedResults = await store.createAIResults(projectId, aiResults);
 
+    console.log("Crawling website content...");
     await store.updateProjectStatus(projectId, "crawling_website");
     const crawledPages = await getCrawledPages(project);
     const savedPages = await store.createCrawledPages(projectId, crawledPages);
 
+    console.log("Analyzing gaps and scores...");
     await store.updateProjectStatus(projectId, "analyzing");
     const websiteAudit = await analyzeWebsiteContent({
       brandName: project.brand_name,
@@ -120,6 +126,7 @@ export async function runAudit(projectId: string) {
       hasRobots: false,
       enoughText: (firstPage?.word_count || 0) >= 50,
     });
+    console.log("Building report...");
     const reportJson = generateReportJson({
       project,
       competitors,
@@ -132,13 +139,25 @@ export async function runAudit(projectId: string) {
     const report = await store.createAuditReport(projectId, reportJson);
 
     await store.updateProjectStatus(projectId, "completed");
-    return { ok: true, status: "completed" as const, reportId: report.id };
-  } catch (error) {
-    await store.updateProjectStatus(
+    return {
+      ok: true,
+      status: "completed" as const,
       projectId,
-      "failed",
-      error instanceof Error ? error.message : "Audit failed.",
-    );
+      reportId: report.id,
+      mock: projectId === DEMO_PROJECT_ID || !hasSupabaseServerConfig(),
+      report: report.report_json,
+    };
+  } catch (error) {
+    console.error("Build report failed:", error);
+    try {
+      await store.updateProjectStatus(
+        projectId,
+        "failed",
+        error instanceof Error ? error.message : "Audit failed.",
+      );
+    } catch (statusError) {
+      console.error("Failed to mark audit failed:", statusError);
+    }
     throw error;
   }
 }

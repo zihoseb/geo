@@ -1,23 +1,12 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
-import { createMemoryStore } from "./memoryStore";
-
-let testDir = "";
+import { createMemoryStore, resetMemoryStoreForTests } from "./memoryStore";
 
 afterEach(() => {
-  if (testDir) {
-    rmSync(testDir, { recursive: true, force: true });
-  }
-  delete process.env.LOCAL_AUDIT_STORE_PATH;
+  resetMemoryStoreForTests();
 });
 
-describe("createMemoryStore local persistence", () => {
+describe("createMemoryStore fallback state", () => {
   it("keeps projects available across store instances", async () => {
-    testDir = mkdtempSync(join(tmpdir(), "b2b-audit-store-"));
-    process.env.LOCAL_AUDIT_STORE_PATH = join(testDir, "audit-store.json");
-
     const firstStore = createMemoryStore();
     const { project } = await firstStore.createProject({
       brandName: "ABC Silicone",

@@ -1,5 +1,3 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
 import type { AIResult, AuditQuery, AuditReportJson, CrawledPage } from "@/types/audit";
 import type { Competitor, Project, ProjectStatus } from "@/types/project";
 import type { AuditReport } from "@/types/report";
@@ -14,18 +12,11 @@ interface LocalState {
   reports: Map<string, AuditReport>;
 }
 
-interface PersistedState {
-  projects: Project[];
-  competitors: Record<string, Competitor[]>;
-  queries: Record<string, AuditQuery[]>;
-  aiResults: Record<string, AIResult[]>;
-  crawledPages: Record<string, CrawledPage[]>;
-  reports: Record<string, AuditReport>;
-}
+const MEMORY_STORE_KEY = "__b2bAiVisibilityAuditStore";
 
-function getStorePath() {
-  return process.env.LOCAL_AUDIT_STORE_PATH || join(process.cwd(), ".data", "audit-store.json");
-}
+type MemoryStoreGlobal = typeof globalThis & {
+  [MEMORY_STORE_KEY]?: LocalState;
+};
 
 function createState(): LocalState {
   return {
@@ -38,43 +29,18 @@ function createState(): LocalState {
   };
 }
 
-function toPersistedState(state: LocalState): PersistedState {
-  return {
-    projects: Array.from(state.projects.values()),
-    competitors: Object.fromEntries(state.competitors.entries()),
-    queries: Object.fromEntries(state.queries.entries()),
-    aiResults: Object.fromEntries(state.aiResults.entries()),
-    crawledPages: Object.fromEntries(state.crawledPages.entries()),
-    reports: Object.fromEntries(state.reports.entries()),
-  };
-}
-
-function fromPersistedState(persisted: PersistedState): LocalState {
-  return {
-    projects: new Map(persisted.projects.map((project) => [project.id, project])),
-    competitors: new Map(Object.entries(persisted.competitors || {})),
-    queries: new Map(Object.entries(persisted.queries || {})),
-    aiResults: new Map(Object.entries(persisted.aiResults || {})),
-    crawledPages: new Map(Object.entries(persisted.crawledPages || {})),
-    reports: new Map(Object.entries(persisted.reports || {})),
-  };
-}
-
 function getState() {
-  const storePath = getStorePath();
-  if (!existsSync(storePath)) return createState();
-
-  try {
-    return fromPersistedState(JSON.parse(readFileSync(storePath, "utf8")) as PersistedState);
-  } catch {
-    return createState();
+  const globalStore = globalThis as MemoryStoreGlobal;
+  if (!globalStore[MEMORY_STORE_KEY]) {
+    globalStore[MEMORY_STORE_KEY] = createState();
   }
+
+  return globalStore[MEMORY_STORE_KEY];
 }
 
-function saveState(state: LocalState) {
-  const storePath = getStorePath();
-  mkdirSync(dirname(storePath), { recursive: true });
-  writeFileSync(storePath, JSON.stringify(toPersistedState(state), null, 2));
+export function resetMemoryStoreForTests() {
+  const globalStore = globalThis as MemoryStoreGlobal;
+  globalStore[MEMORY_STORE_KEY] = createState();
 }
 
 function id(prefix: string) {
@@ -119,7 +85,6 @@ export function createMemoryStore(): AuditStore {
       state.queries.set(project.id, []);
       state.aiResults.set(project.id, []);
       state.crawledPages.set(project.id, []);
-      saveState(state);
 
       return { project, competitors };
     },
@@ -144,7 +109,6 @@ export function createMemoryStore(): AuditStore {
         error_message: errorMessage ?? null,
         updated_at: now(),
       });
-      saveState(state);
     },
 
     async createAuditQueries(projectId: string, queries: AuditQuery[]) {
@@ -155,7 +119,6 @@ export function createMemoryStore(): AuditStore {
         project_id: projectId,
       }));
       state.queries.set(projectId, saved);
-      saveState(state);
       return saved;
     },
 
@@ -167,7 +130,6 @@ export function createMemoryStore(): AuditStore {
         project_id: projectId,
       }));
       state.aiResults.set(projectId, saved);
-      saveState(state);
       return saved;
     },
 
@@ -179,7 +141,6 @@ export function createMemoryStore(): AuditStore {
         project_id: projectId,
       }));
       state.crawledPages.set(projectId, saved);
-      saveState(state);
       return saved;
     },
 
@@ -199,7 +160,6 @@ export function createMemoryStore(): AuditStore {
         created_at: now(),
       };
       state.reports.set(projectId, report);
-      saveState(state);
       return report;
     },
 

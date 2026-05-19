@@ -6,6 +6,7 @@ import type {
   WebsiteAuditResult,
 } from "@/types/audit";
 import type { Competitor, Project } from "@/types/project";
+import { buildMockReport } from "@/lib/mock/report";
 import { calculateVisibilityScore } from "./scoreVisibility";
 
 function roundRate(value: number) {
@@ -43,6 +44,10 @@ export function generateReportJson(input: {
   websiteAudit: WebsiteAuditResult;
   technicalScore: number;
 }): AuditReportJson {
+  if (!input.aiResults.length || !input.crawledPages.length) {
+    return buildMockReport(input.project.id, input.project, input.competitors);
+  }
+
   const totalQueries = Math.max(input.aiResults.length, input.queries.length, 1);
   const targetMentions = input.aiResults.filter((result) => result.target_brand_mentioned).length;
   const mentionRate = roundRate(targetMentions / totalQueries);

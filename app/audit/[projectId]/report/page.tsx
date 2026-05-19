@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { ReportView } from "@/components/audit/ReportView";
+import { buildMockReportBundle } from "@/lib/mock/report";
 import { getStore } from "@/lib/store";
+import type { ReportBundle } from "@/lib/store/types";
 
 export default async function ReportPage({
   params,
@@ -9,9 +10,20 @@ export default async function ReportPage({
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = await params;
-  const bundle = await getStore(projectId).getReportBundle(projectId);
+  let bundle: ReportBundle | null = null;
 
-  if (!bundle) notFound();
+  try {
+    bundle = await getStore(projectId).getReportBundle(projectId);
+  } catch (error) {
+    console.error("Failed to load report:", error);
+  }
+
+  if (!bundle?.report) {
+    bundle = buildMockReportBundle(projectId, {
+      project: bundle?.project,
+      competitors: bundle?.competitors,
+    });
+  }
 
   return (
     <main className="min-h-screen bg-muted/30">

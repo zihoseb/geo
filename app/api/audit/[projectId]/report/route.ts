@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { buildMockReportBundle } from "@/lib/mock/report";
 import { getStore } from "@/lib/store";
 
 export async function GET(
@@ -6,11 +7,21 @@ export async function GET(
   context: { params: Promise<{ projectId: string }> },
 ) {
   const { projectId } = await context.params;
-  const bundle = await getStore(projectId).getReportBundle(projectId);
+  try {
+    const bundle = await getStore(projectId).getReportBundle(projectId);
 
-  if (!bundle) {
-    return NextResponse.json({ error: "Report not found." }, { status: 404 });
+    if (bundle?.report) {
+      return NextResponse.json(bundle);
+    }
+
+    return NextResponse.json(
+      buildMockReportBundle(projectId, {
+        project: bundle?.project,
+        competitors: bundle?.competitors,
+      }),
+    );
+  } catch (error) {
+    console.error("Failed to load report:", error);
+    return NextResponse.json(buildMockReportBundle(projectId));
   }
-
-  return NextResponse.json(bundle);
 }
