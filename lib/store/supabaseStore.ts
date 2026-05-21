@@ -19,6 +19,7 @@ export function createSupabaseStore(): AuditStore {
           target_market: input.targetMarket,
           buyer_type: input.buyerType,
           main_products: input.mainProducts || [],
+          extra_notes: input.extraNotes || null,
           status: "created",
         })
         .select("*")

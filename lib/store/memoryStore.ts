@@ -65,6 +65,7 @@ export function createMemoryStore(): AuditStore {
         target_market: input.targetMarket,
         buyer_type: input.buyerType,
         main_products: input.mainProducts || [],
+        extra_notes: input.extraNotes,
         status: "created",
         error_message: null,
         created_at: timestamp,

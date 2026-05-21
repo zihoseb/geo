@@ -1,18 +1,11 @@
-import { generateReportJson } from "@/lib/analysis/generateReportJson";
-import { calculateTechnicalScore } from "@/lib/analysis/scoreVisibility";
-import { analyzeMention, analyzeWebsiteContent, generateBuyerQueries } from "@/lib/ai/openai";
-import { runPerplexitySearch } from "@/lib/ai/perplexity";
+import { generateBaselineBuyerQueries, generateBaselineReportJson } from "@/lib/analysis/generateBaselineReportJson";
 import { createDemoCrawledPages } from "@/lib/ai/demo";
 import { crawlWebsite } from "@/lib/crawler/crawlWebsite";
 import { DEMO_PROJECT_ID, getStore } from "@/lib/store";
 import type { AuditStore } from "@/lib/store/types";
 import { hasSupabaseServerConfig } from "@/lib/supabase/server";
-import type { AIResult, CrawledPage } from "@/types/audit";
+import type { CrawledPage, WebsiteCrawlStatus } from "@/types/audit";
 import type { Project } from "@/types/project";
-
-function combineWebsiteText(pages: CrawledPage[]) {
-  return pages.map((page) => page.text_content).join("\n\n").slice(0, 60000);
-}
 
 async function ensureDemoProject(projectId: string, store: AuditStore) {
   if (projectId !== DEMO_PROJECT_ID) return null;
@@ -37,12 +30,36 @@ async function ensureDemoProject(projectId: string, store: AuditStore) {
   return project;
 }
 
-async function getCrawledPages(project: Project) {
+async function getCrawledPages(project: Project): Promise<{
+  pages: CrawledPage[];
+  crawlStatus: WebsiteCrawlStatus;
+}> {
   try {
     const pages = await crawlWebsite(project.website_url);
-    return pages.length > 0 ? pages : createDemoCrawledPages(project);
-  } catch {
-    return createDemoCrawledPages(project);
+    if (pages.length > 0) {
+      return {
+        pages,
+        crawlStatus: {
+          status: pages.length >= 2 ? "success" : "partial",
+          analyzed_pages: pages.length,
+          urls: pages.map((page) => page.url),
+          mock_fallback_used: false,
+        },
+      };
+    }
+    throw new Error("Crawler returned no pages.");
+  } catch (error) {
+    const pages = createDemoCrawledPages(project);
+    return {
+      pages,
+      crawlStatus: {
+        status: "failed",
+        analyzed_pages: 0,
+        urls: [],
+        crawl_error: error instanceof Error ? error.message : "Website crawl failed.",
+        mock_fallback_used: true,
+      },
+    };
   }
 }
 
@@ -59,82 +76,23 @@ export async function runAudit(projectId: string) {
 
     console.log("Generating buyer questions...");
     await store.updateProjectStatus(projectId, "generating_queries");
-    const generatedQueries = await generateBuyerQueries({
-      brandName: project.brand_name,
-      industry: project.industry,
-      products: project.main_products,
-      targetMarket: project.target_market,
-      buyerType: project.buyer_type,
-      count: 10,
-    });
-    const queries = await store.createAuditQueries(projectId, generatedQueries.slice(0, 20));
-
-    console.log("Running AI search checks...");
-    await store.updateProjectStatus(projectId, "running_ai_search");
-    const aiResults: AIResult[] = [];
-    for (const [index, query] of queries.entries()) {
-      const search = await runPerplexitySearch({
-        query: query.query,
-        project,
-        competitors,
-        index,
-      });
-      const mentionAnalysis = await analyzeMention({
-        brandName: project.brand_name,
-        competitors: competitors.map((competitor) => competitor.name),
-        answer: search.answer,
-        citations: search.citations,
-      });
-
-      aiResults.push({
-        project_id: projectId,
-        query_id: query.id || "",
-        source: search.source,
-        answer: search.answer,
-        target_brand_mentioned: mentionAnalysis.target_brand_mentioned,
-        mentioned_brands: mentionAnalysis.mentioned_brands,
-        competitors_mentioned: mentionAnalysis.competitors_mentioned,
-        citations: mentionAnalysis.citations,
-        sentiment: mentionAnalysis.sentiment,
-        issues: mentionAnalysis.issues,
-        raw_response: search.raw,
-      });
-    }
-    const savedResults = await store.createAIResults(projectId, aiResults);
+    const generatedQueries = generateBaselineBuyerQueries(project);
+    const queries = await store.createAuditQueries(projectId, generatedQueries);
 
     console.log("Crawling website content...");
     await store.updateProjectStatus(projectId, "crawling_website");
-    const crawledPages = await getCrawledPages(project);
-    const savedPages = await store.createCrawledPages(projectId, crawledPages);
+    const { pages: crawledPages, crawlStatus } = await getCrawledPages(project);
+    await store.createCrawledPages(projectId, crawledPages);
 
     console.log("Analyzing gaps and scores...");
     await store.updateProjectStatus(projectId, "analyzing");
-    const websiteAudit = await analyzeWebsiteContent({
-      brandName: project.brand_name,
-      industry: project.industry,
-      buyerType: project.buyer_type,
-      websiteText: combineWebsiteText(savedPages),
-    });
-    const firstPage = savedPages[0];
-    const schema = firstPage?.schema_json;
-    const technicalScore = calculateTechnicalScore({
-      hasTitle: Boolean(firstPage?.title),
-      hasMetaDescription: Boolean(firstPage?.meta_description),
-      hasH1: Boolean(firstPage?.h1),
-      hasSchema: Array.isArray(schema) ? schema.length > 0 : Boolean(schema),
-      hasSitemap: false,
-      hasRobots: false,
-      enoughText: (firstPage?.word_count || 0) >= 50,
-    });
     console.log("Building report...");
-    const reportJson = generateReportJson({
+    const reportJson = generateBaselineReportJson({
       project,
       competitors,
       queries,
-      aiResults: savedResults,
-      crawledPages: savedPages,
-      websiteAudit,
-      technicalScore,
+      crawledPages,
+      crawlStatus,
     });
     const report = await store.createAuditReport(projectId, reportJson);
 

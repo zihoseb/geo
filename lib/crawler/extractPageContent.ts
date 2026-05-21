@@ -24,6 +24,32 @@ export function extractPageContent(url: string, html: string): CrawledPage {
     })
     .get()
     .filter(Boolean);
+  const externalLinks = $("a[href]")
+    .map((_, element) => $(element).attr("href"))
+    .get()
+    .filter(Boolean)
+    .map((href) => {
+      try {
+        return new URL(href, url).toString();
+      } catch {
+        return "";
+      }
+    })
+    .filter((href) => {
+      if (!href) return false;
+      try {
+        return new URL(href).origin !== new URL(url).origin;
+      } catch {
+        return false;
+      }
+    })
+    .slice(0, 50);
+  const sameAsLinks = schemaJson.flatMap((schema) => {
+    if (!schema || typeof schema !== "object") return [];
+    const value = (schema as { sameAs?: unknown }).sameAs;
+    if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string");
+    return typeof value === "string" ? [value] : [];
+  });
   const textContent = $("body").text().replace(/\s+/g, " ").trim().slice(0, 8000);
 
   return {
@@ -34,6 +60,8 @@ export function extractPageContent(url: string, html: string): CrawledPage {
     h2,
     text_content: textContent,
     schema_json: schemaJson,
+    external_links: Array.from(new Set(externalLinks)),
+    same_as_links: Array.from(new Set(sameAsLinks)),
     word_count: textContent ? textContent.split(/\s+/).length : 0,
   };
 }
@@ -46,14 +74,19 @@ export function extractInternalLinks(baseUrl: string, html: string) {
     "product",
     "products",
     "service",
+    "services",
     "oem",
     "odm",
     "quality",
     "certification",
+    "certifications",
+    "certificate",
     "certificates",
     "faq",
     "contact",
     "blog",
+    "case",
+    "cases",
   ];
 
   const links = $("a[href]")
@@ -80,5 +113,5 @@ export function extractInternalLinks(baseUrl: string, html: string) {
       const bScore = keywords.some((keyword) => b.toLowerCase().includes(keyword)) ? 0 : 1;
       return aScore - bScore;
     })
-    .slice(0, 14);
+    .slice(0, 9);
 }

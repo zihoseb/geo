@@ -12,6 +12,7 @@ interface CreateProjectBody {
   targetMarket?: string;
   buyerType?: string;
   mainProducts?: string[] | string;
+  extraNotes?: string;
   competitors?: {
     name?: string;
     websiteUrl?: string;
@@ -37,6 +38,7 @@ function buildCreateProjectInput(body: CreateProjectBody, brandName: string, web
     targetMarket: body.targetMarket?.trim(),
     buyerType: body.buyerType?.trim(),
     mainProducts: parseProducts(body.mainProducts),
+    extraNotes: body.extraNotes?.trim(),
     competitors:
       body.competitors?.map((competitor) => ({
         name: competitor.name?.trim() || "",

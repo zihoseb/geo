@@ -29,7 +29,7 @@ export async function crawlWebsite(inputUrl: string): Promise<CrawledPage[]> {
 
   const homeHtml = await fetchHtml(inputUrl);
   const links = extractInternalLinks(inputUrl, homeHtml);
-  const urls = [inputUrl, ...links].slice(0, 15);
+  const urls = [inputUrl, ...links].slice(0, 10);
   const pages: CrawledPage[] = [extractPageContent(inputUrl, homeHtml)];
 
   for (const url of urls.slice(1)) {
@@ -41,5 +41,15 @@ export async function crawlWebsite(inputUrl: string): Promise<CrawledPage[]> {
     }
   }
 
-  return pages;
+  let totalChars = 0;
+  return pages.map((page) => {
+    const remaining = Math.max(0, 50000 - totalChars);
+    const text = page.text_content.slice(0, remaining);
+    totalChars += text.length;
+    return {
+      ...page,
+      text_content: text,
+      word_count: text ? text.split(/\s+/).length : 0,
+    };
+  });
 }

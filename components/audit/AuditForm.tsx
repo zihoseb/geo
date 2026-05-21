@@ -20,6 +20,7 @@ export function AuditForm() {
   const [targetMarket, setTargetMarket] = useState("");
   const [buyerType, setBuyerType] = useState("");
   const [mainProducts, setMainProducts] = useState("");
+  const [extraNotes, setExtraNotes] = useState("");
   const [competitors, setCompetitors] = useState(emptyCompetitors);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -40,6 +41,7 @@ export function AuditForm() {
           targetMarket,
           buyerType,
           mainProducts,
+          extraNotes,
           competitors,
         }),
       });
@@ -154,7 +156,11 @@ export function AuditForm() {
 
           <label className="flex flex-col gap-2 text-sm font-medium">
             Extra notes
-            <Textarea placeholder="Optional: target buyers, priority regions, certificates, or product categories." />
+            <Textarea
+              value={extraNotes}
+              onChange={(event) => setExtraNotes(event.target.value)}
+              placeholder="Optional: target buyers, priority regions, certificates, or product categories."
+            />
           </label>
 
           {error ? <div className="rounded-md border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}

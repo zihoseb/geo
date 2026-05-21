@@ -122,5 +122,56 @@ describe("generateReportJson", () => {
     expect(report.recommended_pages[0]?.priority).toBe("high");
     expect(report.action_plan).toHaveLength(1);
     expect(report.summary.visibility_score).toBeGreaterThan(0);
+    expect(report.summary.score_rationale).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          factor: "Brand mention rate",
+          recommendation: expect.any(String),
+        }),
+      ]),
+    );
+    expect(report.buyer_queries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          query: "compare silicone spatula manufacturers with FDA certificates",
+          mentioned_target: false,
+          confidence: expect.any(Number),
+          recommendation: expect.any(String),
+        }),
+      ]),
+    );
+    expect(report.competitor_comparison[0]).toEqual(
+      expect.objectContaining({
+        name: "XYZ Silicone",
+        mention_count: 2,
+        strengths: expect.any(Array),
+        recommended_response: expect.any(String),
+      }),
+    );
+    expect(report.website_content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          dimension: "MOQ",
+          status: "missing",
+          recommendation: expect.any(String),
+        }),
+      ]),
+    );
+    expect(report.external_trust.length).toBeGreaterThanOrEqual(6);
+    expect(report.technical_audit).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          item: "Meta description",
+          status: "pass",
+        }),
+      ]),
+    );
+    expect(report.visualizations.query_heatmap).toHaveLength(report.buyer_queries.length);
+    expect(report.action_plan[0]).toEqual(
+      expect.objectContaining({
+        owner: expect.any(String),
+        timeframe: expect.any(String),
+      }),
+    );
   });
 });

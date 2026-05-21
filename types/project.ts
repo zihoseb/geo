@@ -16,6 +16,7 @@ export interface Project {
   target_market?: string;
   buyer_type?: string;
   main_products?: string[];
+  extra_notes?: string;
   status: ProjectStatus;
   error_message?: string | null;
   created_at: string;

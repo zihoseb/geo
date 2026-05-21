@@ -10,6 +10,7 @@ export interface CreateProjectInput {
   targetMarket?: string;
   buyerType?: string;
   mainProducts?: string[];
+  extraNotes?: string;
   competitors: {
     name: string;
     websiteUrl?: string;

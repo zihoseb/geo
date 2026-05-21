@@ -16,11 +16,15 @@ create table if not exists public.projects (
   target_market text,
   buyer_type text,
   main_products text[],
+  extra_notes text,
   status text default 'created',
   error_message text,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now()
 );
+
+alter table public.projects
+add column if not exists extra_notes text;
 
 create table if not exists public.competitors (
   id uuid primary key default gen_random_uuid(),
